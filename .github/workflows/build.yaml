@@ -1,0 +1,93 @@
+name: Build SWRT Firmware
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: '选择平台 (MT7621, MT7986, QCA, BCM)'
+        required: true
+        default: 'QCA'
+        type: choice
+        options:
+          - QCA
+          - MT7621
+          - MT7986
+          - BCM
+      target:
+        description: '输入编译目标'
+        required: true
+        default: 'rt-ac82u'
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 检出当前仓库代码 (caoya000/swrt-gpl)
+        uses: actions/checkout@v4
+        with:
+          path: swrt-gpl
+
+      - name: 清理磁盘空间
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: 安装依赖
+        run: |
+          sudo ln -sf /bin/bash /bin/sh
+          sudo apt-get update
+          sudo apt-get -y install build-essential asciidoc binutils bison bzip2 gawk gettext git libncurses5-dev libz-dev patch python3 python2.7 unzip zlib1g-dev lib32gcc-s1 libc6-dev-i386 subversion flex uglifyjs git-core gcc-multilib p7zip p7zip-full msmtp libssl-dev texinfo libglib2.0-dev xmlto qemu-utils upx libelf-dev autoconf automake libtool autopoint device-tree-compiler g++-multilib antlr3 gperf wget libncurses5:i386 libelf1:i386 lib32z1 lib32stdc++6 gtk-doc-tools intltool binutils-dev cmake lzma liblzma-dev lzma-dev uuid-dev liblzo2-dev xsltproc dos2unix libstdc++5 docbook-xsl-* sharutils autogen shtool gengetopt libltdl-dev libtool-bin pkg-config
+
+      - name: 设置 Toolchains (QCA)
+        if: ${{ github.event.inputs.platform == 'QCA' }}
+        run: |
+          # 使用你 fork 的 qca-toolchains 仓库
+          git clone --depth 1 https://github.com/caoya000/qca-toolchains
+          sudo ln -sf $(pwd)/qca-toolchains/toolchain-arm_cortex-a7_gcc-8.5.0_musl-1.1.24_eabi /opt/
+
+      - name: 设置 Toolchains (MTK)
+        if: ${{ github.event.inputs.platform == 'MT7621' || github.event.inputs.platform == 'MT7986' }}
+        run: |
+          git clone --depth 1 https://github.com/caoya000/mtk-toolchains
+          if [ "${{ github.event.inputs.platform }}" = "MT7621" ]; then
+            sudo ln -sf $(pwd)/mtk-toolchains/toolchain-mipsel_1004kc_gcc-8.5.0_musl-1.1.24 /opt/
+          else
+            sudo ln -sf $(pwd)/mtk-toolchains/toolchain-aarch64_cortex-a53_gcc-8.4.0_musl /opt/
+          fi
+
+      - name: 执行编译
+        run: |
+          if [ "${{ github.event.inputs.platform }}" = "MT7621" ]; then
+            cd swrt-gpl/release/src-mtk-mips
+          elif [ "${{ github.event.inputs.platform }}" = "MT7986" ]; then
+            cd swrt-gpl/release/src-mtk-arm
+          elif [ "${{ github.event.inputs.platform }}" = "QCA" ]; then
+            cd swrt-gpl/release/src-qca-ipq40xx
+          elif [ "${{ github.event.inputs.platform }}" = "BCM" ]; then
+            cd swrt-gpl/release/src-bcm-470x
+          fi
+          
+          # 开始执行 make
+          make ${{ github.event.inputs.target }}
+
+      - name: 整理固件文件
+        run: |
+          mkdir -p ./output
+          # 提取编译好的固件
+          find swrt-gpl/release/ -maxdepth 3 -name "image" -type d | while read dir; do
+            cp -r "$dir"/* ./output/ 2>/dev/null || true
+          done
+          # 打包压缩以便下载
+          cd ./output && tar -cvzf ../firmware.tar.gz .
+
+      - name: 上传固件到 GitHub Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: SWRT-${{ github.event.inputs.platform }}-${{ github.event.inputs.target }}
+          path: firmware.tar.gz
