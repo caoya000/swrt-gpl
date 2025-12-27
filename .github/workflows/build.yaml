@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       platform:
-        description: '选择平台 (MT7621, MT7986, QCA, BCM)'
+        description: '选择平台 (QCA, MT7621, MT7986, BCM)'
         required: true
         default: 'QCA'
         type: choice
@@ -41,8 +41,20 @@ jobs:
       - name: 安装依赖
         run: |
           sudo ln -sf /bin/bash /bin/sh
+          # 关键步骤：开启 32 位架构支持，否则无法安装 :i386 软件包
+          sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get -y install build-essential asciidoc binutils bison bzip2 gawk gettext git libncurses5-dev libz-dev patch python3 python2.7 unzip zlib1g-dev lib32gcc-s1 libc6-dev-i386 subversion flex uglifyjs git-core gcc-multilib p7zip p7zip-full msmtp libssl-dev texinfo libglib2.0-dev xmlto qemu-utils upx libelf-dev autoconf automake libtool autopoint device-tree-compiler g++-multilib antlr3 gperf wget libncurses5:i386 libelf1:i386 lib32z1 lib32stdc++6 gtk-doc-tools intltool binutils-dev cmake lzma liblzma-dev lzma-dev uuid-dev liblzo2-dev xsltproc dos2unix libstdc++5 docbook-xsl-* sharutils autogen shtool gengetopt libltdl-dev libtool-bin pkg-config
+          
+          # 修正了部分软件包名称以适配 Ubuntu 22.04
+          sudo apt-get -y install build-essential asciidoc binutils bison bzip2 gawk gettext git \
+            libncurses5-dev libz-dev patch python3 python2.7 unzip zlib1g-dev lib32gcc-s1 \
+            libc6-dev-i386 subversion flex uglifyjs git-core gcc-multilib p7zip p7zip-full \
+            msmtp libssl-dev texinfo libglib2.0-dev xmlto qemu-utils upx libelf-dev \
+            autoconf automake libtool autopoint device-tree-compiler g++-multilib \
+            antlr3 gperf wget libncurses5:i386 libelf1:i386 lib32z1 lib32stdc++6 \
+            gtk-doc-tools intltool binutils-dev cmake lzma liblzma-dev lzma-dev \
+            uuid-dev liblzo2-dev xsltproc dos2unix libstdc++5 docbook-xsl-* \
+            sharutils autogen shtool gengetopt libltdl-dev libtool-bin pkg-config
 
       - name: 设置 Toolchains (QCA)
         if: ${{ github.event.inputs.platform == 'QCA' }}
@@ -54,7 +66,7 @@ jobs:
       - name: 设置 Toolchains (MTK)
         if: ${{ github.event.inputs.platform == 'MT7621' || github.event.inputs.platform == 'MT7986' }}
         run: |
-          git clone --depth 1 https://github.com/caoya000/mtk-toolchains
+          git clone --depth 1 https://github.com/SWRT-dev/mtk-toolchains
           if [ "${{ github.event.inputs.platform }}" = "MT7621" ]; then
             sudo ln -sf $(pwd)/mtk-toolchains/toolchain-mipsel_1004kc_gcc-8.5.0_musl-1.1.24 /opt/
           else
